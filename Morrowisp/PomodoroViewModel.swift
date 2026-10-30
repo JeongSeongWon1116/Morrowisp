@@ -172,6 +172,26 @@ class PomodoroViewModel: ObservableObject {
         startSession(currentState == .idle ? .focus : currentState)
     }
 
+    /// 집중 시작 제안: 전환 관리가 켜졌고 완전히 대기 중이며, 오늘(로컬 날짜)의 미션이 남아 있을 때만 그 글.
+    /// 사용자가 팝오버를 열었을 때만 보입니다. 알림이나 자동 시작은 없습니다.
+    var focusPromptMission: String? {
+        guard settings.transitionManagementEnabled,
+              timerState == .idle, currentState == .idle else { return nil }
+        let mission = settings.dailyMissions.mission(for: now())
+        let text = mission.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !mission.done, !text.isEmpty else { return nil }
+        return text
+    }
+
+    /// 제안의 "집중 시작": 할 일이 비었을 때만 미션을 넣고, 시작 버튼과 같은 시작을 부릅니다.
+    func startFocusFromPrompt() {
+        guard let mission = focusPromptMission else { return }
+        if focusTask.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            focusTask = mission
+        }
+        startFocusSession()
+    }
+
     func pauseTimer() {
         guard timerState == .running, let resumeTime = lastResumeTime else { return }
         accumulatedActiveTime = min(accumulatedActiveTime + now().timeIntervalSince(resumeTime), sessionDuration)

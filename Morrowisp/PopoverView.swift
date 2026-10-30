@@ -19,6 +19,7 @@ struct PopoverView: View {
         VStack(spacing: 14) {
             if settings.transitionManagementEnabled {
                 DailyMissionView(store: settings.dailyMissions)
+                FocusPromptRow(store: settings.dailyMissions)
             }
             HStack(spacing: 6) {
                 Image(systemName: isAwaitingChoice ? "bell.badge" : viewModel.currentState.symbolName)
@@ -161,6 +162,36 @@ struct PopoverView: View {
         }
     }
 
+}
+
+/// 집중 시작 제안: 대기 중이고 오늘의 미션이 남았을 때만 보이는 한 줄. 누르면 시작 버튼과 같은 시작을 부릅니다.
+/// 미션을 고치거나 자정이 지나면 다시 그리도록 미션 저장소와 분 단위 시계를 봅니다.
+struct FocusPromptRow: View {
+    @Environment(\.locale) private var locale
+    @EnvironmentObject var viewModel: PomodoroViewModel
+    @ObservedObject var store: DailyMissionStore
+
+    var body: some View {
+        // 분 단위 시계: 팝오버가 열린 채 자정을 지나면 어제 미션의 제안을 거둡니다. 지우지 마세요.
+        TimelineView(.periodic(from: Calendar.current.startOfDay(for: .now), by: 60)) { _ in
+            if let mission = viewModel.focusPromptMission {
+                HStack(spacing: 6) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(String(localized: "Start focusing on this?", bundle: AppLocalization.bundle(for: locale), locale: locale))
+                            .font(.caption).foregroundStyle(.secondary)
+                        Text(mission).font(.callout).lineLimit(2)
+                    }
+                    Spacer(minLength: 4)
+                    Button(String(localized: "Start focus", bundle: AppLocalization.bundle(for: locale), locale: locale)) {
+                        viewModel.startFocusFromPrompt()
+                    }
+                    .controlSize(.small)
+                    .fixedSize()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
 }
 
 /// 팝오버 맨 아래의 "새 버전" 줄. 상태를 값으로 받아, 업데이터 없이도 그려 볼 수 있습니다.

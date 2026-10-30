@@ -2245,6 +2245,23 @@
         }
       }
     },
+    "Start focus": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start focus"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "집중 시작"
+          }
+        }
+      }
+    },
     "Start focus automatically after breaks": {
       "extractionState": "manual",
       "localizations": {
@@ -2258,6 +2275,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "휴식이 끝나면 집중 자동 시작"
+          }
+        }
+      }
+    },
+    "Start focusing on this?": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start focusing on this?"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 미션으로 집중을 시작할까요?"
           }
         }
       }
