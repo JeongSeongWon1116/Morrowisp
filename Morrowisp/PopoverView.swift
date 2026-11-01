@@ -11,6 +11,7 @@ struct PopoverView: View {
     @EnvironmentObject var viewModel: PomodoroViewModel
     @ObservedObject var settings = AppSettings.shared
     @ObservedObject var updates = UpdateController.shared
+    @ObservedObject var muninn = MuninnService.shared
     @Environment(\.openWindow) private var openWindow
 
     private var isAwaitingChoice: Bool { viewModel.timerState == .awaitingChoice }
@@ -71,7 +72,7 @@ struct PopoverView: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    private var hasSideColumn: Bool { settings.transitionManagementEnabled || isAwaitingChoice }
+    private var hasSideColumn: Bool { settings.transitionManagementEnabled || isAwaitingChoice || muninn.isConfigured }
 
     /// 왼쪽 칸: 상태, 남은 시간, 주기 점, 시작·일시정지, 복귀·연장, 건너뛰기·초기화.
     private var timerColumn: some View {
@@ -131,6 +132,9 @@ struct PopoverView: View {
     /// 오른쪽 칸: 집중 시작 제안, 할 일·보상·다음 시작점, 오늘 요약.
     private var sideColumn: some View {
         VStack(alignment: .leading, spacing: 10) {
+            if muninn.isConfigured && !isAwaitingChoice {
+                MuninnTodaySection(service: muninn)
+            }
             if settings.transitionManagementEnabled {
                 FocusPromptRow(store: settings.dailyMissions)
             }
@@ -152,6 +156,10 @@ struct PopoverView: View {
                 if !reward.isEmpty { NoteLine(label: String(localized: "Reward", bundle: AppLocalization.bundle(for: locale), locale: locale), text: reward) }
                 TextField("Where to pick up next time", text: $viewModel.nextStartingPoint)
                     .textFieldStyle(.roundedBorder)
+                // 기분은 Muninn 하루 기록에만 붙으므로, 연결했을 때만 묻습니다. 건너뛰어도 됩니다.
+                if muninn.isConfigured {
+                    MoodPicker(selection: viewModel.focusMood) { viewModel.setMood($0) }
+                }
             } else if viewModel.currentState == .idle || viewModel.currentState == .focus {
                 if !viewModel.resumeHint.isEmpty { NoteLine(label: String(localized: "Pick up from", bundle: AppLocalization.bundle(for: locale), locale: locale), text: viewModel.resumeHint) }
                 NoteField(title: String(localized: "Task", bundle: AppLocalization.bundle(for: locale), locale: locale), text: $viewModel.focusTask,

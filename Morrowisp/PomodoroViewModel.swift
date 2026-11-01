@@ -71,6 +71,9 @@ class PomodoroViewModel: ObservableObject {
 
     /// 이번 집중을 연장한 횟수
     @Published private(set) var extensionCount: Int = 0
+    /// 선택 화면에서 고른 기분(1~5). 고르지 않아도 됩니다. 마친 집중의 하루 기록에 붙습니다.
+    @Published private(set) var focusMood: Int?
+    static let moodRange = 1...5
 
     let settings: AppSettings
     // 현재 시각 공급자. 테스트에서 실제 시간을 기다리지 않고 시계를 주입하기 위한 이음매입니다.
@@ -91,6 +94,7 @@ class PomodoroViewModel: ObservableObject {
     private var modelContext: ModelContext
     private let notesContext: ModelContext? // 할 일·보상·다음 시작점을 두는 별도 저장소. nil 이면 저장하지 않습니다.
     private let shortcuts: ShortcutRunning // 집중의 시작과 끝에 단축어를 실행하는 것
+    private let recordFocusJournal: @MainActor (JournalEntry, String) -> Void // 마친 집중을 Muninn 하루 기록으로 (날짜 키 yyyy-MM-dd)
     private weak var appDelegate: AppDelegate?
 
     init(
@@ -99,6 +103,11 @@ class PomodoroViewModel: ObservableObject {
         settings: AppSettings = .shared,
         notesContext: ModelContext? = nil,
         shortcuts: ShortcutRunning = URLShortcutRunner(),
+        recordFocusJournal: @escaping @MainActor (JournalEntry, String) -> Void = { entry, day in
+            // 대기열에는 바로 넣고(종료 중에도 남게), 보내기는 뒤에서. 타이머는 기다리지 않습니다.
+            MuninnService.shared.enqueue(entry, day: day)
+            Task { await MuninnService.shared.flushJournal() }
+        },
         exportSession: @escaping @MainActor (FocusLogEntry, TransitionDetails?) -> Void = { ObsidianExporter.shared.appendSession($0, details: $1) },
         now: @escaping () -> Date = Date.init
     ) {
@@ -106,6 +115,7 @@ class PomodoroViewModel: ObservableObject {
         self.modelContext = modelContext
         self.notesContext = notesContext
         self.shortcuts = shortcuts
+        self.recordFocusJournal = recordFocusJournal
         self.settings = settings
         self.now = now
         self.appDelegate = appDelegate
@@ -164,12 +174,22 @@ class PomodoroViewModel: ObservableObject {
         appDelegate?.closePopover()
     }
 
-    func startFocusSession() {
+    /// minutes: 이번 한 번만 쓸 집중 길이 (다음 일정 전 짧은 집중). 설정은 바꾸지 않습니다.
+    func startFocusSession(minutes: Int? = nil) {
         guard timerState == .idle else { return }
         if currentState == .idle {
             completedFocusSessions = 0
         }
-        startSession(currentState == .idle ? .focus : currentState)
+        let state = currentState == .idle ? PomodoroState.focus : currentState
+        let duration = state == .focus ? minutes.map { TimeInterval(max(1, $0) * 60) } : nil
+        startSession(state, duration: duration)
+    }
+
+    /// 선택 화면의 기분 얼굴. 같은 것을 다시 누르면 지웁니다.
+    func setMood(_ mood: Int?) {
+        guard timerState == .awaitingChoice else { return }
+        guard let mood, Self.moodRange.contains(mood), mood != focusMood else { focusMood = nil; return }
+        focusMood = mood
     }
 
     /// 집중 시작 제안: 전환 관리가 켜졌고 완전히 대기 중이며, 오늘(로컬 날짜)의 미션이 남아 있을 때만 그 글.
@@ -283,10 +303,10 @@ class PomodoroViewModel: ObservableObject {
         timeRemaining = TimeInterval(settings.focusDurationInMinutes * 60)
     }
 
-    private func startSession(_ state: PomodoroState) {
+    private func startSession(_ state: PomodoroState, duration: TimeInterval? = nil) {
         clearSessionTracking()
         currentState = state
-        sessionDuration = getTotalDuration(for: state)
+        sessionDuration = duration ?? getTotalDuration(for: state)
         sessionStartTime = now()
         startTicking()
         if state == .focus { runShortcut(settings.focusStartShortcut) }
@@ -349,6 +369,7 @@ class PomodoroViewModel: ObservableObject {
         sessionDuration = 0
         awaitingSince = nil
         extensionCount = 0
+        focusMood = nil
     }
 
     private func timerDidEnd(skipped: Bool = false) {
@@ -486,9 +507,16 @@ class PomodoroViewModel: ObservableObject {
         var details: TransitionDetails?
         if currentState == .focus {
             // 연장 중 그만두어도 원래 집중은 끝까지 마쳤습니다. 설정을 꺼도 사실은 남깁니다.
+            let finished = completed || endedFromChoice || extensionCount > 0
             settings.focusCompletions.record(newLog.id,
-                completed: completed || endedFromChoice || extensionCount > 0,
+                completed: finished,
                 extensionCount: extensionCount)
+            if finished {
+                let entry = JournalEntry(minutes: max(1, Int((finalDuration / 60).rounded())), mood: focusMood,
+                                         text: focusTask.trimmingCharacters(in: .whitespacesAndNewlines))
+                recordFocusJournal(entry, DailyMissionStore.dayKey(for: endTime))
+                focusMood = nil
+            }
             settings.focusCompletions.pending = nil
             settings.focusCompletions.pendingDetails = nil
             details = collectTransitionDetails(endedFromChoice: endedFromChoice, choseBreak: choseBreak)
@@ -581,7 +609,7 @@ class PomodoroViewModel: ObservableObject {
     // 그래서 휴식 추천은 팝오버에서만 보이고, 여기서는 휴식 → 집중의 "이어서"만 붙습니다.
     private func showSessionTransitionNotification(ended: PomodoroState, next: PomodoroState, autoStarting: Bool) {
         // 테스트 호스트에서는 사용 중인 앱과 같은 번들 ID로 알림이 뜨지 않도록 건너뜁니다.
-        if DataController.isRunningTests { return }
+        if DataController.usesMemoryStores { return }
         let content = UNMutableNotificationContent()
         let text = NotificationText.sessionTransition(
             ended: ended, next: next, autoStarting: autoStarting,
@@ -598,7 +626,7 @@ class PomodoroViewModel: ObservableObject {
 
     /// 집중이 끝나 선택을 기다린다는 알림
     private func showFocusEndedNotification() {
-        if DataController.isRunningTests { return }
+        if DataController.usesMemoryStores { return }
         let content = UNMutableNotificationContent()
         let text = NotificationText.focusEnded(reward: focusReward)
         content.title = text.title

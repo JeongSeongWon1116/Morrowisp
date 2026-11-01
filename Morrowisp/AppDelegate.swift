@@ -26,6 +26,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, UNUserNot
         // 테스트 호스트로 실행된 경우에는 중복 실행 체크를 건너뜁니다.
         // (사용 중인 앱이 떠 있으면 테스트 호스트가 exit(0) 으로 꺼져 테스트가 시작도 못 합니다.)
         if DataController.isRunningTests { return }
+        #if DEBUG
+        if PreviewHarness.isActive { return }
+        #endif
         let runningApps = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
         if runningApps.count > 1 {
             // 기존 앱 활성화하고 새 인스턴스 즉시 종료
@@ -39,6 +42,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, UNUserNot
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         if DataController.isRunningTests { return }
+        #if DEBUG
+        if PreviewHarness.isActive { MainActor.assumeIsolated { PreviewHarness.run() }; return }
+        #endif
         guard let modelContext = modelContext else {
             fatalError("AppDelegate에 ModelContext가 제공되지 않았습니다.")
         }
@@ -98,6 +104,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, UNUserNot
             }
             // 기록 창에서 메모를 지웠을 수 있으니, 칸 옆의 "지난 것에서 고르기"를 열 때마다 다시 읽습니다.
             MainActor.assumeIsolated { pomodoroViewModel.refreshNoteSuggestions() }
+            // Muninn 오늘 할 일·일정 (60초 안에 다시 열면 부르지 않습니다). 실패해도 팝오버는 그대로 열립니다.
+            Task { await MuninnService.shared.refresh() }
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
             NSApp.activate(ignoringOtherApps: true)

@@ -5,27 +5,74 @@ import SwiftUI
 import AppKit
 import UserNotifications
 
+/// 설정 창 왼쪽 목록의 칸. 마지막에 연 칸을 기억합니다 (rawValue 로 저장).
+enum SettingsSection: String, CaseIterable, Identifiable {
+    case timer, notifications, notes, shortcuts, muninn, general
+    var id: String { rawValue }
+
+    /// 저장해 둔 값을 읽습니다. 모르는 값(옛 버전·지워진 칸)이면 타이머로.
+    init(stored: String) { self = SettingsSection(rawValue: stored) ?? .timer }
+
+    var title: LocalizedStringKey {
+        switch self {
+        case .timer: "Timer"
+        case .notifications: "Notifications"
+        case .notes: "Obsidian notes"
+        case .shortcuts: "Shortcuts"
+        case .muninn: "Muninn"
+        case .general: "General"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .timer: "timer"
+        case .notifications: "bell"
+        case .notes: "doc.text"
+        case .shortcuts: "square.2.layers.3d"
+        case .muninn: "checklist"
+        case .general: "gearshape"
+        }
+    }
+}
+
+/// macOS 시스템 설정처럼 왼쪽 목록에서 칸을 고릅니다.
 struct PreferencesView: View {
-    enum Tab: Hashable { case timer, notifications, obsidian, shortcuts, general }
     @ObservedObject var settings = AppSettings.shared
     @ObservedObject var obsidian = ObsidianExporter.shared
     @ObservedObject var updates = UpdateController.shared
-    @State var selection: Tab = .timer
+    @ObservedObject var muninn = MuninnService.shared
+    @AppStorage("settingsSection") private var storedSection = SettingsSection.timer.rawValue
+
+    private var selection: Binding<SettingsSection?> {
+        Binding(get: { SettingsSection(stored: storedSection) },
+                set: { if let section = $0 { storedSection = section.rawValue } })
+    }
 
     var body: some View {
-        TabView(selection: $selection) {
-            TimerSettingsTab(settings: settings)
-                .tabItem { Label("Timer", systemImage: "timer") }.tag(Tab.timer)
-            NotificationSettingsTab(settings: settings)
-                .tabItem { Label("Notifications", systemImage: "bell") }.tag(Tab.notifications)
-            ObsidianSettingsTab(obsidian: obsidian)
-                .tabItem { Label("Obsidian", systemImage: "doc.text") }.tag(Tab.obsidian)
-            ShortcutSettingsTab(settings: settings)
-                .tabItem { Label("Shortcuts", systemImage: "square.2.layers.3d") }.tag(Tab.shortcuts)
-            GeneralSettingsTab(settings: settings, updates: updates)
-                .tabItem { Label("General", systemImage: "gearshape") }.tag(Tab.general)
+        NavigationSplitView {
+            List(SettingsSection.allCases, selection: selection) { section in
+                Label(section.title, systemImage: section.symbol).tag(section)
+            }
+            .navigationSplitViewColumnWidth(min: 170, ideal: 180, max: 220)
+        } detail: {
+            detail(for: SettingsSection(stored: storedSection))
+                .navigationTitle(SettingsSection(stored: storedSection).title)
         }
-        .frame(width: 540, height: 460)
+        .toolbar(removing: .sidebarToggle)
+        .frame(width: 720, height: 500)
+    }
+
+    @ViewBuilder
+    private func detail(for section: SettingsSection) -> some View {
+        switch section {
+        case .timer: TimerSettingsTab(settings: settings)
+        case .notifications: NotificationSettingsTab(settings: settings)
+        case .notes: ObsidianSettingsTab(obsidian: obsidian)
+        case .shortcuts: ShortcutSettingsTab(settings: settings)
+        case .muninn: MuninnSettingsTab(service: muninn)
+        case .general: GeneralSettingsTab(settings: settings, updates: updates)
+        }
     }
 }
 

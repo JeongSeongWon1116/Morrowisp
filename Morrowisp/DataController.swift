@@ -12,7 +12,7 @@ class DataController {
         do {
             // 단위 테스트의 호스트로 실행될 때는 실제 기록 저장소를 열지 않습니다.
             // (테스트가 사용자의 집중 기록을 읽거나 바꾸지 않도록 메모리 저장소를 씁니다.)
-            if DataController.isRunningTests {
+            if DataController.usesMemoryStores {
                 let config = ModelConfiguration(isStoredInMemoryOnly: true)
                 return try ModelContainer(for: FocusLogEntry.self, configurations: config)
             }
@@ -29,7 +29,7 @@ class DataController {
     /// 열지 못하면 nil 이고, 그때는 메모만 저장되지 않습니다(타이머와 기록은 그대로 동작).
     lazy var transitionContainer: ModelContainer? = {
         do {
-            if DataController.isRunningTests {
+            if DataController.usesMemoryStores {
                 let config = ModelConfiguration(isStoredInMemoryOnly: true)
                 return try ModelContainer(for: TransitionNote.self, configurations: config)
             }
@@ -47,6 +47,14 @@ class DataController {
     static var isRunningTests: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
             || NSClassFromString("XCTestCase") != nil
+    }
+
+    /// 메모리 저장소를 쓸지: 테스트 호스트이거나, 개발 빌드의 화면 찍기(PreviewHarness)일 때.
+    static var usesMemoryStores: Bool {
+        #if DEBUG
+        if PreviewHarness.isActive { return true }
+        #endif
+        return isRunningTests
     }
 
     private init() {}
