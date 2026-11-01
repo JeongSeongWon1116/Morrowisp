@@ -16,67 +16,19 @@ struct PopoverView: View {
     private var isAwaitingChoice: Bool { viewModel.timerState == .awaitingChoice }
 
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 12) {
             if settings.transitionManagementEnabled {
                 DailyMissionView(store: settings.dailyMissions)
-                FocusPromptRow(store: settings.dailyMissions)
-            }
-            HStack(spacing: 6) {
-                Image(systemName: isAwaitingChoice ? "bell.badge" : viewModel.currentState.symbolName)
-                    .foregroundStyle(viewModel.currentState.color)
-                Text(isAwaitingChoice ? String(localized: "\(viewModel.currentState.localizedDescription(locale: locale)) ended", bundle: AppLocalization.bundle(for: locale), locale: locale) : viewModel.currentState.localizedDescription(locale: locale))
-                    .fontWeight(.semibold)
-            }
-            .font(.headline)
-
-            Text(viewModel.timeRemainingString)
-                .font(.system(size: 44, weight: .light, design: .rounded))
-                .monospacedDigit()
-
-            CycleDotsView(
-                completed: viewModel.focusSessionsInCurrentCycle,
-                total: settings.longBreakInterval
-            )
-
-            if settings.transitionManagementEnabled || isAwaitingChoice {
-                transitionNotes
             }
 
-            Button(action: primaryAction) {
-                Text(buttonTitle)
-                    .font(.system(size: 17, weight: .semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(Color.accentColor)
-                    .foregroundColor(.white)
-                    .cornerRadius(12)
-            }
-            .buttonStyle(.plain)
-
-            if isAwaitingChoice {
-                Button("Focus for \(Int(PomodoroViewModel.focusExtension / 60).formatted()) more min") { viewModel.extendFocus() }
-                    .frame(maxWidth: .infinity)
-            }
-
-            // 휴식 중: 다시 계획하지 않고 하던 일로 바로 돌아간다 (휴식은 지금까지로 기록)
-            if viewModel.canReturnToFocus {
-                Button("Return — start focusing") { viewModel.returnToFocus() }
-                    .frame(maxWidth: .infinity)
-                    .help("End this break and start focusing with your task and next starting point")
-            }
-
-            HStack {
-                Button("Skip") { viewModel.skipToNextSession() }
-                    .disabled(viewModel.timerState == .idle || isAwaitingChoice)
-                Spacer()
-                Button("Reset") { viewModel.resetToIdle() }
-                    .disabled(viewModel.timerState == .idle && viewModel.currentState == .idle)
-            }
-            .padding(.horizontal, 4)
-
-            if settings.transitionManagementEnabled {
-                DaySummaryView(notesContext: notesContext, completions: settings.focusCompletions,
-                               isFocusing: viewModel.currentState == .focus)
+            // 세로로 길어지지 않게 두 칸으로: 왼쪽은 타이머와 조작, 오른쪽은 할 일·보상·제안.
+            HStack(alignment: .top, spacing: 16) {
+                timerColumn
+                    .frame(width: 190)
+                if hasSideColumn {
+                    sideColumn
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
 
             Divider()
@@ -115,8 +67,80 @@ struct PopoverView: View {
         }
         .padding()
         // 높이는 내용(할 일·보상 칸, 선택 화면)에 맞춰 달라집니다.
-        .frame(width: 260)
+        .frame(width: hasSideColumn ? 440 : 240)
         .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var hasSideColumn: Bool { settings.transitionManagementEnabled || isAwaitingChoice }
+
+    /// 왼쪽 칸: 상태, 남은 시간, 주기 점, 시작·일시정지, 복귀·연장, 건너뛰기·초기화.
+    private var timerColumn: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: isAwaitingChoice ? "bell.badge" : viewModel.currentState.symbolName)
+                    .foregroundStyle(viewModel.currentState.color)
+                Text(isAwaitingChoice ? String(localized: "\(viewModel.currentState.localizedDescription(locale: locale)) ended", bundle: AppLocalization.bundle(for: locale), locale: locale) : viewModel.currentState.localizedDescription(locale: locale))
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .font(.headline)
+
+            Text(viewModel.timeRemainingString)
+                .font(.system(size: 40, weight: .light, design: .rounded))
+                .monospacedDigit()
+
+            CycleDotsView(
+                completed: viewModel.focusSessionsInCurrentCycle,
+                total: settings.longBreakInterval
+            )
+
+            Button(action: primaryAction) {
+                Text(buttonTitle)
+                    .font(.system(size: 16, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(Color.accentColor)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+            }
+            .buttonStyle(.plain)
+
+            if isAwaitingChoice {
+                Button("Focus for \(Int(PomodoroViewModel.focusExtension / 60).formatted()) more min") { viewModel.extendFocus() }
+                    .frame(maxWidth: .infinity)
+            }
+
+            // 휴식 중: 다시 계획하지 않고 하던 일로 바로 돌아간다 (휴식은 지금까지로 기록)
+            if viewModel.canReturnToFocus {
+                Button("Return — start focusing") { viewModel.returnToFocus() }
+                    .frame(maxWidth: .infinity)
+                    .help("End this break and start focusing with your task and next starting point")
+            }
+
+            HStack {
+                Button("Skip") { viewModel.skipToNextSession() }
+                    .disabled(viewModel.timerState == .idle || isAwaitingChoice)
+                Spacer()
+                Button("Reset") { viewModel.resetToIdle() }
+                    .disabled(viewModel.timerState == .idle && viewModel.currentState == .idle)
+            }
+        }
+    }
+
+    /// 오른쪽 칸: 집중 시작 제안, 할 일·보상·다음 시작점, 오늘 요약.
+    private var sideColumn: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if settings.transitionManagementEnabled {
+                FocusPromptRow(store: settings.dailyMissions)
+            }
+            transitionNotes
+            Spacer(minLength: 0)
+            if settings.transitionManagementEnabled {
+                DaySummaryView(notesContext: notesContext, completions: settings.focusCompletions,
+                               isFocusing: viewModel.currentState == .focus)
+            }
+        }
     }
 
     /// 할 일·보상·다음 시작점. 집중 전과 집중 중에는 적는 칸, 집중이 끝나면 보상과 다음 시작점 칸, 휴식 중에는 읽기만.
@@ -175,18 +199,19 @@ struct FocusPromptRow: View {
         // 분 단위 시계: 팝오버가 열린 채 자정을 지나면 어제 미션의 제안을 거둡니다. 지우지 마세요.
         TimelineView(.periodic(from: Calendar.current.startOfDay(for: .now), by: 60)) { _ in
             if let mission = viewModel.focusPromptMission {
-                HStack(spacing: 6) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(String(localized: "Start focusing on this?", bundle: AppLocalization.bundle(for: locale), locale: locale))
-                            .font(.caption).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(String(localized: "Start focusing on this?", bundle: AppLocalization.bundle(for: locale), locale: locale))
+                        .font(.caption).foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    HStack(spacing: 6) {
                         Text(mission).font(.callout).lineLimit(2)
+                        Spacer(minLength: 4)
+                        Button(String(localized: "Start focus", bundle: AppLocalization.bundle(for: locale), locale: locale)) {
+                            viewModel.startFocusFromPrompt()
+                        }
+                        .controlSize(.small)
+                        .fixedSize()
                     }
-                    Spacer(minLength: 4)
-                    Button(String(localized: "Start focus", bundle: AppLocalization.bundle(for: locale), locale: locale)) {
-                        viewModel.startFocusFromPrompt()
-                    }
-                    .controlSize(.small)
-                    .fixedSize()
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
