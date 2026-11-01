@@ -158,6 +158,46 @@ struct MuninnClientTests {
         #expect(today.nextEvent?.startDate != nil)
     }
 
+    @Test func Google_모양의_일정_start_객체를_읽는다() async throws {
+        // Muninn 브랜치(claude/today-journal-ui-d957ee)의 실제 응답 모양
+        let raw = #"""
+        {"date":"2026-11-01","timezone":"Asia/Seoul",
+         "tasks":[{"list":"L1","list_title":"내 할 일","id":"t1","title":"덱","due":"2026-11-01","overdue":false}],
+         "events":[
+          {"id":"e1","summary":"휴가","start":{"date":"2026-11-01"},"end":{"date":"2026-11-02"},"calendar":"me＠example.com","color":"#4986e7","allDay":true},
+          {"id":"e2","summary":"지도교수 면담","start":{"dateTime":"2026-11-01T16:00:00+09:00"},"end":{"dateTime":"2026-11-01T17:00:00+09:00"},"calendar":"me＠example.com","color":"#4986e7","allDay":false}],
+         "next_event":{"id":"e2","summary":"지도교수 면담","start":{"dateTime":"2026-11-01T16:00:00+09:00"},"end":{"dateTime":"2026-11-01T17:00:00+09:00"},"calendar":"me＠example.com","color":"#4986e7","allDay":false},
+         "journal":{"entries":[]}}
+        """#
+        StubURLProtocol.register(host: "google-shape.test") { _ in (200, Data(raw.utf8)) }
+        let client = MuninnClient(baseURL: URL(string: "https://google-shape.test")!, token: token, session: StubURLProtocol.session())
+        let today = try await client.today()
+        #expect(today.tasks.map(\.title) == ["덱"])
+        #expect(today.nextEvent?.title == "지도교수 면담")
+        #expect(today.nextEvent?.startDate == ISO8601DateFormatter().date(from: "2026-11-01T07:00:00Z"))
+    }
+
+    @Test func 하루_종일_일정은_시각이_없다() throws {
+        let allDay = #"{"summary":"휴가","start":{"date":"2026-11-01"},"allDay":true}"#
+        let event = try JSONDecoder().decode(MuninnEvent.self, from: Data(allDay.utf8))
+        #expect(event.title == "휴가")
+        #expect(event.startDate == nil)
+        let dateOnly = #"{"summary":"휴가","start":{"date":"2026-11-01"}}"#
+        #expect(try JSONDecoder().decode(MuninnEvent.self, from: Data(dateOnly.utf8)).startDate == nil, "allDay 가 없어도 date 만 있으면 하루 종일")
+    }
+
+    @Test func Google_모양의_다음_일정으로_짧은_집중을_제안한다() async {
+        let raw = #"{"date":"2026-11-01","tasks":[],"next_event":{"summary":"지도교수 면담","start":{"dateTime":"2026-11-01T16:00:00+09:00"},"allDay":false}}"#
+        StubURLProtocol.register(host: "google-offer.test") { _ in (200, Data(raw.utf8)) }
+        let clock = TestClock()
+        clock.date = ISO8601DateFormatter().date(from: "2026-11-01T15:40:00+09:00")!
+        let service = MuninnService(defaults: nil, tokens: MemoryTokenStore(token), session: StubURLProtocol.session(), now: { clock.date })
+        service.baseURLString = "https://google-offer.test"
+        await service.refresh()
+        #expect(service.nextEvent?.minutesUntil == 20)
+        #expect(service.shortFocusOffer(normalMinutes: 25)?.focusMinutes == 15)
+    }
+
     @Test func 할_일_끝냄은_경로를_인코딩하고_completed를_보낸다() async throws {
         StubURLProtocol.register(host: "done.test") { _ in (200, json(["status": "completed"])) }
         let client = MuninnClient(baseURL: URL(string: "https://done.test")!, token: token, session: StubURLProtocol.session())

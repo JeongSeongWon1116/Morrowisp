@@ -33,9 +33,12 @@ struct MuninnTask: Codable, Equatable {
 
 struct MuninnEvent: Equatable, Decodable {
     let title: String
+    /// 시작 시각(RFC 3339). 하루 종일 일정이면 nil.
     let start: String?
 
-    private enum CodingKeys: String, CodingKey { case title, summary, start }
+    private enum CodingKeys: String, CodingKey { case title, summary, start, allDay }
+    /// Google 모양: "start": {"dateTime": "..."} 또는 하루 종일이면 {"date": "yyyy-MM-dd"}
+    private enum StartKeys: String, CodingKey { case dateTime, date }
 
     init(title: String, start: String?) { self.title = title; self.start = start }
 
@@ -43,7 +46,17 @@ struct MuninnEvent: Equatable, Decodable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         title = (try? c.decodeIfPresent(String.self, forKey: .title))
             ?? (try? c.decodeIfPresent(String.self, forKey: .summary)) ?? ""
-        start = try? c.decodeIfPresent(String.self, forKey: .start)
+        let allDay = (try? c.decodeIfPresent(Bool.self, forKey: .allDay)) ?? false
+        if allDay {
+            start = nil
+        } else if let text = try? c.decodeIfPresent(String.self, forKey: .start) {
+            start = text
+        } else if let object = try? c.nestedContainer(keyedBy: StartKeys.self, forKey: .start) {
+            // date 만 있으면 하루 종일 일정이라 시각이 없습니다.
+            start = try? object.decodeIfPresent(String.self, forKey: .dateTime)
+        } else {
+            start = nil
+        }
     }
 
     /// 하루 종일 일정(날짜만)은 시각이 없으므로 nil 입니다.
