@@ -512,8 +512,10 @@ class PomodoroViewModel: ObservableObject {
                 completed: finished,
                 extensionCount: extensionCount)
             if finished {
+                // 끝난 시각과 그 날짜로 보냅니다 (자정을 넘겨 보내도 그날의 기록으로).
                 let entry = JournalEntry(minutes: max(1, Int((finalDuration / 60).rounded())), mood: focusMood,
-                                         text: focusTask.trimmingCharacters(in: .whitespacesAndNewlines))
+                                         text: focusTask.trimmingCharacters(in: .whitespacesAndNewlines),
+                                         time: JournalEntry.timeString(for: endTime))
                 recordFocusJournal(entry, DailyMissionStore.dayKey(for: endTime))
                 focusMood = nil
             }

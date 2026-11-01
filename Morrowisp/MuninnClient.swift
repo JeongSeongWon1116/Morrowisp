@@ -79,15 +79,28 @@ struct MuninnToday: Equatable, Decodable {
     }
 }
 
-/// 하루 기록 한 줄: 집중을 마친 분, 고른 기분(1~5, 고르지 않으면 없음), 할 일.
+/// 하루 기록 한 줄: 집중을 마친 분, 고른 기분(1~5, 고르지 않으면 없음), 할 일,
+/// 끝난 시각(사용자 시간대의 "HH:mm"). 날짜는 경로에 들어갑니다.
+/// 시각을 함께 보내므로, 대기열에서 늦게 보내도 실제로 끝난 시각으로 남습니다.
 struct JournalEntry: Codable, Equatable {
     var kind = "focus"
     let minutes: Int
     let mood: Int?
     let text: String
+    let time: String?
 
-    init(minutes: Int, mood: Int?, text: String) {
-        self.minutes = minutes; self.mood = mood; self.text = text
+    init(minutes: Int, mood: Int?, text: String, time: String? = nil) {
+        self.minutes = minutes; self.mood = mood; self.text = text; self.time = time
+    }
+
+    /// "HH:mm" (그레고리력 24시간, 주어진 달력의 시간대)
+    nonisolated static func timeString(for date: Date, calendar: Calendar = .current) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
     }
 }
 

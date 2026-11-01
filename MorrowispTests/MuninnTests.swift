@@ -172,13 +172,13 @@ struct MuninnClientTests {
     @Test func 하루_기록은_날짜_경로로_보내고_기분이_없으면_빼고_보낸다() async throws {
         StubURLProtocol.register(host: "journal.test") { _ in (201, json([:])) }
         let client = MuninnClient(baseURL: URL(string: "https://journal.test")!, token: token, session: StubURLProtocol.session())
-        try await client.addJournalEntry(JournalEntry(minutes: 25, mood: 4, text: "덱"), day: "2026-11-01")
+        try await client.addJournalEntry(JournalEntry(minutes: 25, mood: 4, text: "덱", time: "13:55"), day: "2026-11-01")
         try await client.addJournalEntry(JournalEntry(minutes: 15, mood: nil, text: ""), day: "2026-11-01")
         let requests = StubURLProtocol.requests(host: "journal.test")
         #expect(requests.map(\.method) == ["POST", "POST"])
         #expect(requests[0].url.path() == "/api/journal/2026-11-01/entries")
         let first = try JSONSerialization.jsonObject(with: requests[0].body!) as? [String: AnyHashable]
-        #expect(first == ["kind": "focus", "minutes": 25, "mood": 4, "text": "덱"])
+        #expect(first == ["kind": "focus", "minutes": 25, "mood": 4, "text": "덱", "time": "13:55"])
         let second = try JSONSerialization.jsonObject(with: requests[1].body!) as? [String: AnyHashable]
         #expect(second == ["kind": "focus", "minutes": 15, "text": ""])
     }
@@ -342,6 +342,30 @@ struct MuninnServiceTests {
         #expect(service.status == .notLoaded)
     }
 
+    @Test func 늦게_보낸_기록도_끝난_시각과_날짜를_그대로_보낸다() async throws {
+        nonisolated(unsafe) var online = false
+        StubURLProtocol.register(host: "svc-late.test") { _ in online ? (201, json([:])) : nil }
+        let service = service(host: "svc-late.test")
+        // 23:58 에 끝난 집중을 오프라인으로 쌓아 두고, 자정이 지난 뒤 보냅니다.
+        await service.recordFocus(JournalEntry(minutes: 25, mood: 3, text: "a", time: "23:58"), day: "2026-10-31")
+        clock.advance(3600)
+        online = true
+        await service.flushJournal()
+        let request = try #require(StubURLProtocol.requests(host: "svc-late.test").last)
+        #expect(request.url.path() == "/api/journal/2026-10-31/entries")
+        let body = try JSONSerialization.jsonObject(with: request.body!) as? [String: AnyHashable]
+        #expect(body?["time"] as? String == "23:58")
+    }
+
+    @Test func 시각은_사용자_시간대의_24시간_HH_mm() {
+        var seoul = Calendar(identifier: .gregorian)
+        seoul.timeZone = TimeZone(identifier: "Asia/Seoul")!
+        #expect(JournalEntry.timeString(for: noon40, calendar: seoul) == "12:40")
+        #expect(JournalEntry.timeString(for: noon40.addingTimeInterval(11 * 3600 + 18 * 60), calendar: seoul) == "23:58")
+        var utc = seoul; utc.timeZone = TimeZone(identifier: "UTC")!
+        #expect(JournalEntry.timeString(for: noon40, calendar: utc) == "03:40")
+    }
+
     @Test func 연결하지_않았으면_하루_기록을_쌓지_않는다() async {
         let service = MuninnService(defaults: nil, tokens: MemoryTokenStore(), session: StubURLProtocol.session())
         await service.recordFocus(JournalEntry(minutes: 25, mood: 3, text: "a"), day: "2026-11-01")
@@ -409,18 +433,22 @@ struct FocusJournalHookTests {
         viewModel.startBreakAfterFocus()
         #expect(journal.entries.count == 1)
         let (entry, day) = journal.entries[0]
-        #expect(entry == JournalEntry(minutes: 15, mood: 5, text: "덱 2장"))
-        #expect(day == DailyMissionStore.dayKey(for: noon40.addingTimeInterval(15 * 60)))
+        // 12:40 에 시작한 15분 집중 → 12:55 (KST). 테스트 기기의 시간대와 상관없이 같은 달력으로 확인합니다.
+        let end = noon40.addingTimeInterval(15 * 60)
+        #expect(entry == JournalEntry(minutes: 15, mood: 5, text: "덱 2장", time: JournalEntry.timeString(for: end)))
+        #expect(day == DailyMissionStore.dayKey(for: end))
         #expect(viewModel.focusMood == nil, "다음 집중으로 넘어가지 않는다")
     }
 
     @Test func 기분은_건너뛸_수_있고_연장한_집중은_한_번만_기록한다() {
+        let start = clock.date
         viewModel.startFocusSession()
         runOutTheClock()
         viewModel.extendFocus()
         runOutTheClock()
         viewModel.startBreakAfterFocus()
-        #expect(journal.entries.map(\.0) == [JournalEntry(minutes: 35, mood: nil, text: "")])
+        #expect(journal.entries.map(\.0) == [JournalEntry(minutes: 35, mood: nil, text: "",
+                                                          time: JournalEntry.timeString(for: start.addingTimeInterval(35 * 60)))])
     }
 
     @Test func 기분은_선택_화면에서만_1에서_5까지_고른다() {
@@ -439,11 +467,14 @@ struct FocusJournalHookTests {
     }
 
     @Test func 선택_화면에서_초기화하거나_앱을_꺼도_한_번만_기록한다() {
+        let start = clock.date
         viewModel.startFocusSession()
         runOutTheClock()
         viewModel.setMood(2)
+        clock.advance(600) // 선택 화면에서 오래 있다가 눌러도, 시각은 시간이 다 된 때
         viewModel.resetToIdle()
-        #expect(journal.entries.map(\.0) == [JournalEntry(minutes: 25, mood: 2, text: "")])
+        #expect(journal.entries.map(\.0) == [JournalEntry(minutes: 25, mood: 2, text: "",
+                                                          time: JournalEntry.timeString(for: start.addingTimeInterval(25 * 60)))])
 
         viewModel.startFocusSession()
         runOutTheClock()
@@ -454,10 +485,12 @@ struct FocusJournalHookTests {
 
     @Test func 전환_관리를_끄면_기분_없이_마친_집중만_기록한다() {
         settings.transitionManagementEnabled = false
+        let start = clock.date
         viewModel.startFocusSession()
         runOutTheClock()
         #expect(viewModel.currentState == .shortBreak)
-        #expect(journal.entries.map(\.0) == [JournalEntry(minutes: 25, mood: nil, text: "")])
+        #expect(journal.entries.map(\.0) == [JournalEntry(minutes: 25, mood: nil, text: "",
+                                                          time: JournalEntry.timeString(for: start.addingTimeInterval(25 * 60)))])
     }
 
     @Test func 건너뛰거나_초기화한_집중은_기록하지_않는다() {

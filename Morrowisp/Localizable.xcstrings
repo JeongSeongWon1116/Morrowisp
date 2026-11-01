@@ -681,19 +681,19 @@
         }
       }
     },
-    "Without https, the token travels unencrypted. Use http only on a trusted network.": {
+    "Without https, the token travels unencrypted. http works only for local names and IP addresses on a trusted network.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Without https, the token travels unencrypted. Use http only on a trusted network."
+            "value": "Without https, the token travels unencrypted. http works only for local names and IP addresses on a trusted network."
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "https가 아니면 토큰이 암호화되지 않은 채 오갑니다. 믿을 수 있는 네트워크에서만 http를 쓰세요."
+            "value": "https가 아니면 토큰이 암호화되지 않은 채 오갑니다. http는 믿을 수 있는 네트워크의 로컬 이름이나 IP 주소에서만 됩니다."
           }
         }
       }
