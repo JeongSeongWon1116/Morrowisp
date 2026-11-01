@@ -8,7 +8,13 @@ import ServiceManagement
 
 @MainActor
 final class AppSettings: ObservableObject {
-    static let shared = AppSettings()
+    static let shared: AppSettings = {
+        #if DEBUG
+        // 개발 빌드의 화면 찍기는 사용자의 설정을 읽거나 쓰지 않습니다.
+        if PreviewHarness.isActive { return AppSettings(defaults: nil) }
+        #endif
+        return AppSettings()
+    }()
 
     static let soundOff = "없음"
     // NSSound(named:)로 재생 가능한 macOS 시스템 알림음 목록

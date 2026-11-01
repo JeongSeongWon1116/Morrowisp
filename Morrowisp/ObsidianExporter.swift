@@ -7,7 +7,12 @@ import AppKit
 
 @MainActor
 final class ObsidianExporter: ObservableObject {
-    static let shared = ObsidianExporter()
+    static let shared: ObsidianExporter = {
+        #if DEBUG
+        if PreviewHarness.isActive { return ObsidianExporter(defaults: nil) }
+        #endif
+        return ObsidianExporter()
+    }()
 
     private static let enabledKey = "obsidianSyncEnabled"
     private static let bookmarkKey = "obsidianFolderBookmark"

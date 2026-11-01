@@ -82,7 +82,7 @@ xcodebuild -project Morrowisp.xcodeproj -scheme Morrowisp -destination 'platform
 
 For packaging and distribution, see the [release guide](docs/RELEASE.md).
 
-Source version: **2.0.0** (build **8**). See [CHANGELOG.md](CHANGELOG.md) for the history; older entries are in Korean.
+Source version: **2.1.0** (build **10**). See [CHANGELOG.md](CHANGELOG.md) for the history; older entries are in Korean.
 
 ## License
 
