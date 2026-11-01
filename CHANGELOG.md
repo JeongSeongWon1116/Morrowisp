@@ -4,6 +4,17 @@ Older entries are in Korean.
 
 이 프로젝트는 [유의적 버전(Semantic Versioning)](https://semver.org/lang/ko/)을 따릅니다.
 
+## [2.1.0] - 2026-11-01
+
+### Added
+- Start-focus prompt: with transition support on and the timer idle, the popover offers today's unfinished mission with a Start focus button. No notifications or auto start.
+- Muninn connection (Settings > Muninn): server address and a personal API token stored in the Keychain. When connected, the popover shows today's Google tasks (overdue first) and the next event, offers a shorter focus that ends before an event under 25 minutes away, and marks tasks done in Google.
+- Optional mood tap (five faces) when a focus ends; each finished focus is added to the Muninn daily journal with its end time, queued and retried when offline.
+
+### Changed
+- Popover in two columns (timer and controls on the left; prompt, tasks, notes and summary on the right), about a third as tall.
+- Settings use a sidebar instead of top tabs and remember the last section.
+
 ## [2.0.1] - 2026-10-16
 
 ### Changed

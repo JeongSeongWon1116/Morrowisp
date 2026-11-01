@@ -76,7 +76,7 @@ xcodebuild -project Morrowisp.xcodeproj -scheme Morrowisp -destination 'platform
 
 ## 🔖 버전
 
-현재 버전: **2.0.0** (빌드 **8**) — 변경 내역은 [CHANGELOG.md](CHANGELOG.md)를 참고하세요.
+현재 버전: **2.1.0** (빌드 **10**) — 변경 내역은 [CHANGELOG.md](CHANGELOG.md)를 참고하세요.
 
 ## 📝 향후 개선 계획
 
